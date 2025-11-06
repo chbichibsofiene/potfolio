@@ -1,0 +1,52 @@
+name: Build and deploy to GitHub Pages
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      base_path:
+        description: 'Optional base path for the site (e.g. /repo-name/)'
+        required: false
+        default: ''
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        # The build will prefer a repo secret `BASE_PATH` (set in
+        # Settings → Secrets → Actions) so pushes to `main` can build
+        # with the correct repo base automatically. If that secret is
+        # empty, the workflow dispatch input `base_path` will be used
+        # (so manual runs can override).
+        env:
+          BASE_PATH: ${{ secrets.BASE_PATH }}
+        run: |
+          if [ -z "$BASE_PATH" ]; then
+            BASE_PATH="${{ github.event.inputs.base_path }}"
+          fi
+          echo "Using BASE_PATH=$BASE_PATH"
+          BASE_PATH="$BASE_PATH" npm run build
+
+      - name: Deploy to GitHub Pages (gh-pages npm)
+        # Use the gh-pages npm package (script `npm run deploy`) to publish
+        # the already-built `dist` folder. The gh-pages package will pick
+        # up the GH token from GH_TOKEN for auth.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run deploy
